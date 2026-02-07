@@ -3,6 +3,22 @@
 IMAGE_NAME="yt-downloader"
 CONTAINER_NAME="yt-downloader-cli"
 
+# Detect container runtime (prefer nerdctl, fallback to docker)
+RUNTIME=""
+if command -v nerdctl &> /dev/null; then
+    RUNTIME="nerdctl"
+elif command -v docker &> /dev/null; then
+    RUNTIME="docker"
+else
+    echo "❌ Error: Neither nerdctl nor docker found."
+    echo "   Please install one of them to use this tool."
+    exit 1
+fi
+
+echo "🐳 Found container runtime: $RUNTIME"
+read -p "   Press Enter to continue or Ctrl+C to cancel..."
+echo ""
+
 # Check for client_secrets.json
 if [ ! -f "client_secrets.json" ]; then
     echo "⚠️  Warning: client_secrets.json not found."
@@ -12,7 +28,7 @@ if [ ! -f "client_secrets.json" ]; then
 fi
 
 echo "🔨 Building image..."
-nerdctl build -t $IMAGE_NAME .
+$RUNTIME build -t $IMAGE_NAME .
 
 if [ $? -ne 0 ]; then
     echo "❌ Build failed!"
@@ -47,7 +63,7 @@ echo "================================================"
 echo ""
 
 # Run container interactively with volume mounts
-nerdctl run -it --rm \
+$RUNTIME run -it --rm \
     --name $CONTAINER_NAME \
     -v "$(pwd)/downloads:/app/downloads" \
     -v "$(pwd)/credentials:/app/credentials" \

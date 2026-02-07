@@ -17,6 +17,27 @@ import random
 import time
 
 
+# ANSI Color Codes
+class Colors:
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    
+    # Regular colors
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    
+    # Background colors
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_BLUE = '\033[44m'
+
+
 OUTPUT_PATH = "/app/downloads"
 CREDENTIALS_PATH = "/app/credentials"
 CLIENT_SECRETS_FILE = "/app/client_secrets.json"
@@ -36,6 +57,7 @@ RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
 
 def download_video(url: str, quality: str = "best"):
     """Download a YouTube video."""
+    c = Colors
     os.makedirs(OUTPUT_PATH, exist_ok=True)
     
     ydl_opts = {
@@ -47,28 +69,30 @@ def download_video(url: str, quality: str = "best"):
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            print(f"\nFetching video info for: {url}")
+            print(f"\n{c.CYAN}🔍 Fetching video info for:{c.RESET} {url}")
             info = ydl.extract_info(url, download=True)
-            print(f"\n✅ Downloaded: {info.get('title', 'Unknown')}")
-            print(f"📁 Saved to: {OUTPUT_PATH}")
+            print(f"\n{c.GREEN}✅ Downloaded:{c.RESET} {c.WHITE}{info.get('title', 'Unknown')}{c.RESET}")
+            print(f"{c.CYAN}📁 Saved to:{c.RESET} {OUTPUT_PATH}")
             return True
     except Exception as e:
-        print(f"\n❌ Error downloading video: {e}")
+        print(f"\n{c.RED}❌ Error downloading video:{c.RESET} {e}")
         return False
 
 
 def progress_hook(d):
     """Display download progress."""
+    c = Colors
     if d['status'] == 'downloading':
         percent = d.get('_percent_str', 'N/A')
         speed = d.get('_speed_str', 'N/A')
-        print(f"\rDownloading: {percent} at {speed}", end='', flush=True)
+        print(f"\r{c.CYAN}⬇️  Downloading:{c.RESET} {c.GREEN}{percent}{c.RESET} at {c.YELLOW}{speed}{c.RESET}   ", end='', flush=True)
     elif d['status'] == 'finished':
-        print("\nDownload complete, processing...")
+        print(f"\n{c.GREEN}✅ Download complete, processing...{c.RESET}")
 
 
 def download_audio_only(url: str):
     """Download only the audio from a YouTube video as MP3."""
+    c = Colors
     os.makedirs(OUTPUT_PATH, exist_ok=True)
     
     ydl_opts = {
@@ -84,32 +108,35 @@ def download_audio_only(url: str):
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            print(f"\nFetching audio for: {url}")
+            print(f"\n{c.CYAN}🔍 Fetching audio for:{c.RESET} {url}")
             info = ydl.extract_info(url, download=True)
-            print(f"\n✅ Downloaded audio: {info.get('title', 'Unknown')}")
-            print(f"📁 Saved to: {OUTPUT_PATH}")
+            print(f"\n{c.GREEN}✅ Downloaded audio:{c.RESET} {c.WHITE}{info.get('title', 'Unknown')}{c.RESET}")
+            print(f"{c.CYAN}📁 Saved to:{c.RESET} {OUTPUT_PATH}")
             return True
     except Exception as e:
-        print(f"\n❌ Error downloading audio: {e}")
+        print(f"\n{c.RED}❌ Error downloading audio:{c.RESET} {e}")
         return False
 
 
 def get_video_info(url: str):
     """Get information about a video without downloading."""
+    c = Colors
     ydl_opts = {'quiet': True}
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            print(f"\n{'='*50}")
-            print(f"Title:    {info.get('title')}")
-            print(f"Duration: {info.get('duration', 0) // 60}:{info.get('duration', 0) % 60:02d}")
-            print(f"Channel:  {info.get('channel')}")
-            print(f"Views:    {info.get('view_count', 'N/A'):,}")
-            print(f"{'='*50}")
+            print(f"\n{c.CYAN}╔{'═'*48}╗{c.RESET}")
+            print(f"{c.CYAN}║{c.RESET}  {c.BOLD}ℹ️  Video Information{c.RESET}")
+            print(f"{c.CYAN}╠{'═'*48}╣{c.RESET}")
+            print(f"{c.CYAN}║{c.RESET}  {c.WHITE}Title:{c.RESET}    {info.get('title')}")
+            print(f"{c.CYAN}║{c.RESET}  {c.WHITE}Duration:{c.RESET} {info.get('duration', 0) // 60}:{info.get('duration', 0) % 60:02d}")
+            print(f"{c.CYAN}║{c.RESET}  {c.WHITE}Channel:{c.RESET}  {info.get('channel')}")
+            print(f"{c.CYAN}║{c.RESET}  {c.WHITE}Views:{c.RESET}    {info.get('view_count', 'N/A'):,}")
+            print(f"{c.CYAN}╚{'═'*48}╝{c.RESET}")
             return info
     except Exception as e:
-        print(f"Error fetching info: {e}")
+        print(f"{c.RED}❌ Error fetching info:{c.RESET} {e}")
         return None
 
 
@@ -127,51 +154,53 @@ def get_video_files():
 
 def list_downloads():
     """List all downloaded files."""
+    c = Colors
     if not os.path.exists(OUTPUT_PATH):
-        print("No downloads yet.")
+        print(f"{c.YELLOW}📭 No downloads yet.{c.RESET}")
         return
     
     files = os.listdir(OUTPUT_PATH)
     if not files:
-        print("No downloads yet.")
+        print(f"{c.YELLOW}📭 No downloads yet.{c.RESET}")
         return
     
-    print(f"\n📁 Downloads ({OUTPUT_PATH}):")
-    print("-" * 60)
+    print(f"\n{c.CYAN}{c.BOLD}📁 Downloads{c.RESET} {c.DIM}({OUTPUT_PATH}){c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
     for idx, f in enumerate(sorted(files), 1):
         filepath = os.path.join(OUTPUT_PATH, f)
         size = os.path.getsize(filepath)
         size_mb = size / (1024 * 1024)
         # Mark video files with index for stitching
         if f.lower().endswith(VIDEO_EXTENSIONS):
-            print(f"  [{idx:2d}] 🎬 {f} ({size_mb:.1f} MB)")
+            print(f"  {c.GREEN}[{idx:2d}]{c.RESET} 🎬 {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
         else:
-            print(f"       🎵 {f} ({size_mb:.1f} MB)")
-    print("-" * 60)
+            print(f"       🎵 {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
 
 
 def stitch_videos(output_name: str = None):
     """Interactive video stitching."""
     from moviepy import VideoFileClip, concatenate_videoclips
     
+    c = Colors
     video_files = get_video_files()
     
     if not video_files:
-        print("❌ No video files found in downloads folder.")
+        print(f"{c.RED}❌ No video files found in downloads folder.{c.RESET}")
         return False
     
     # Display available videos
-    print(f"\n🎬 Available videos for stitching:")
-    print("-" * 60)
+    print(f"\n{c.MAGENTA}{c.BOLD}🎬 Available videos for stitching:{c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
     for idx, f in enumerate(video_files, 1):
         filepath = os.path.join(OUTPUT_PATH, f)
         size_mb = os.path.getsize(filepath) / (1024 * 1024)
-        print(f"  [{idx:2d}] {f} ({size_mb:.1f} MB)")
-    print("-" * 60)
+        print(f"  {c.GREEN}[{idx:2d}]{c.RESET} {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
     
     # Get user selection
-    print("\nEnter video numbers to stitch (in order), separated by spaces or commas.")
-    print("Example: 1 3 2  or  1,3,2")
+    print(f"\n{c.CYAN}Enter video numbers to stitch (in order), separated by spaces or commas.{c.RESET}")
+    print(f"{c.DIM}Example: 1 3 2  or  1,3,2{c.RESET}")
     
     try:
         selection = input("\nSelect videos: ").strip()
@@ -188,19 +217,19 @@ def stitch_videos(output_name: str = None):
     try:
         indices = [int(x.strip()) for x in selection.split() if x.strip()]
     except ValueError:
-        print("❌ Invalid input. Please enter numbers only.")
+        print(f"{c.RED}❌ Invalid input. Please enter numbers only.{c.RESET}")
         return False
     
     # Validate indices
     selected_files = []
     for idx in indices:
         if idx < 1 or idx > len(video_files):
-            print(f"❌ Invalid selection: {idx}. Valid range is 1-{len(video_files)}")
+            print(f"{c.RED}❌ Invalid selection: {idx}. Valid range is 1-{len(video_files)}{c.RESET}")
             return False
         selected_files.append(video_files[idx - 1])
     
     if len(selected_files) < 2:
-        print("❌ Please select at least 2 videos to stitch.")
+        print(f"{c.RED}❌ Please select at least 2 videos to stitch.{c.RESET}")
         return False
     
     # Get output filename
@@ -222,10 +251,10 @@ def stitch_videos(output_name: str = None):
     output_path = os.path.join(OUTPUT_PATH, output_name)
     
     # Confirm
-    print(f"\n📋 Stitch order:")
+    print(f"\n{c.CYAN}{c.BOLD}📋 Stitch order:{c.RESET}")
     for i, f in enumerate(selected_files, 1):
-        print(f"   {i}. {f}")
-    print(f"\n📁 Output: {output_name}")
+        print(f"   {c.GREEN}{i}.{c.RESET} {c.WHITE}{f}{c.RESET}")
+    print(f"\n{c.CYAN}📁 Output:{c.RESET} {c.WHITE}{output_name}{c.RESET}")
     
     try:
         confirm = input("\nProceed? [Y/n]: ").strip().lower()
@@ -238,20 +267,20 @@ def stitch_videos(output_name: str = None):
         return False
     
     # Perform stitching
-    print("\n🔄 Loading videos...")
+    print(f"\n{c.YELLOW}🔄 Loading videos...{c.RESET}")
     clips = []
     
     try:
         for i, filename in enumerate(selected_files, 1):
             filepath = os.path.join(OUTPUT_PATH, filename)
-            print(f"   Loading [{i}/{len(selected_files)}]: {filename}")
+            print(f"   {c.DIM}Loading [{i}/{len(selected_files)}]:{c.RESET} {filename}")
             clip = VideoFileClip(filepath)
             clips.append(clip)
         
-        print("\n🔄 Stitching videos (this may take a while)...")
+        print(f"\n{c.YELLOW}🔄 Stitching videos (this may take a while)...{c.RESET}")
         final_clip = concatenate_videoclips(clips, method="compose")
         
-        print(f"🔄 Writing output file...")
+        print(f"{c.YELLOW}🔄 Writing output file...{c.RESET}")
         final_clip.write_videofile(
             output_path,
             codec='libx264',
@@ -267,7 +296,7 @@ def stitch_videos(output_name: str = None):
             clip.close()
         
         output_size = os.path.getsize(output_path) / (1024 * 1024)
-        print(f"\n✅ Successfully created: {output_name} ({output_size:.1f} MB)")
+        print(f"\n{c.GREEN}✅ Successfully created:{c.RESET} {c.WHITE}{output_name}{c.RESET} {c.DIM}({output_size:.1f} MB){c.RESET}")
         return True
         
     except Exception as e:
@@ -554,10 +583,11 @@ def backup_to_gcs(filepath: str, bucket_name: str, credentials) -> bool:
 
 def backup_interactive():
     """Interactive backup to Google Cloud Storage."""
+    c = Colors
     video_files = get_video_files()
     
     if not video_files:
-        print("❌ No video files found in downloads folder.")
+        print(f"{c.RED}❌ No video files found in downloads folder.{c.RESET}")
         return False
     
     # Get credentials
@@ -568,30 +598,30 @@ def backup_interactive():
     # Get bucket name
     bucket_name = get_or_set_bucket_name()
     if not bucket_name:
-        print("❌ No bucket name provided.")
+        print(f"{c.RED}❌ No bucket name provided.{c.RESET}")
         return False
     
     # Display available videos
-    print(f"\n🎬 Available videos for backup:")
-    print("-" * 60)
+    print(f"\n{c.BLUE}{c.BOLD}☁️  Cloud Backup{c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
     for idx, f in enumerate(video_files, 1):
         filepath = os.path.join(OUTPUT_PATH, f)
         size_mb = os.path.getsize(filepath) / (1024 * 1024)
-        print(f"  [{idx:2d}] {f} ({size_mb:.1f} MB)")
-    print("-" * 60)
+        print(f"  {c.GREEN}[{idx:2d}]{c.RESET} {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
     
     # Get user selection
-    print("\nEnter video numbers to backup, separated by spaces or commas.")
-    print("Or type 'all' to backup everything.")
+    print(f"\n{c.CYAN}Enter video numbers to backup, separated by spaces or commas.")
+    print(f"Or type '{c.GREEN}all{c.CYAN}' to backup everything.{c.RESET}")
     
     try:
-        selection = input("\nSelect videos: ").strip()
+        selection = input(f"\n{c.CYAN}Select videos:{c.RESET} ").strip()
     except (KeyboardInterrupt, EOFError):
         print("\nCancelled.")
         return False
     
     if not selection:
-        print("No videos selected.")
+        print(f"{c.YELLOW}No videos selected.{c.RESET}")
         return False
     
     # Parse selection
@@ -602,22 +632,22 @@ def backup_interactive():
         try:
             indices = [int(x.strip()) for x in selection.split() if x.strip()]
         except ValueError:
-            print("❌ Invalid input. Please enter numbers only.")
+            print(f"{c.RED}❌ Invalid input. Please enter numbers only.{c.RESET}")
             return False
         
         selected_files = []
         for idx in indices:
             if idx < 1 or idx > len(video_files):
-                print(f"❌ Invalid selection: {idx}. Valid range is 1-{len(video_files)}")
+                print(f"{c.RED}❌ Invalid selection: {idx}. Valid range is 1-{len(video_files)}{c.RESET}")
                 return False
             selected_files.append(video_files[idx - 1])
     
     # Confirm
-    print(f"\n📋 Backup to: gs://{bucket_name}/ytd-backups/")
-    print(f"   Files: {len(selected_files)} video(s)")
+    print(f"\n{c.CYAN}{c.BOLD}📋 Backup to:{c.RESET} {c.WHITE}gs://{bucket_name}/ytd-backups/{c.RESET}")
+    print(f"   {c.WHITE}Files:{c.RESET} {len(selected_files)} video(s)")
     
     try:
-        confirm = input("\nProceed with backup? [Y/n]: ").strip().lower()
+        confirm = input(f"\n{c.CYAN}Proceed with backup?{c.RESET} [Y/n]: ").strip().lower()
     except (KeyboardInterrupt, EOFError):
         print("\nCancelled.")
         return False
@@ -627,7 +657,7 @@ def backup_interactive():
         return False
     
     # Perform backup
-    print("\n📤 Starting backup...")
+    print(f"\n{c.YELLOW}📤 Starting backup...{c.RESET}")
     success_count = 0
     
     for filename in selected_files:
@@ -635,7 +665,7 @@ def backup_interactive():
         if backup_to_gcs(filepath, bucket_name, credentials):
             success_count += 1
     
-    print(f"\n✅ Backup complete: {success_count}/{len(selected_files)} files uploaded")
+    print(f"\n{c.GREEN}✅ Backup complete:{c.RESET} {c.WHITE}{success_count}/{len(selected_files)}{c.RESET} files uploaded")
     return success_count == len(selected_files)
 
 
@@ -867,31 +897,32 @@ def resumable_upload(insert_request):
 
 def upload_interactive():
     """Interactive video upload wizard."""
+    c = Colors
     video_files = get_video_files()
     
     if not video_files:
-        print("❌ No video files found in downloads folder.")
+        print(f"{c.RED}❌ No video files found in downloads folder.{c.RESET}")
         return False
     
     # Check for client_secrets.json
     if not os.path.exists(CLIENT_SECRETS_FILE):
-        print("❌ YouTube upload not configured!")
-        print("\nTo enable uploads, you need to:")
-        print("1. Go to Google Cloud Console (console.cloud.google.com)")
-        print("2. Create a project and enable YouTube Data API v3")
-        print("3. Create OAuth 2.0 credentials (Desktop app)")
-        print("4. Download the JSON and save as 'client_secrets.json'")
-        print("\nSee README.md for detailed instructions.")
+        print(f"{c.RED}❌ YouTube upload not configured!{c.RESET}")
+        print(f"\n{c.YELLOW}To enable uploads, you need to:{c.RESET}")
+        print(f"  {c.WHITE}1.{c.RESET} Go to Google Cloud Console (console.cloud.google.com)")
+        print(f"  {c.WHITE}2.{c.RESET} Create a project and enable YouTube Data API v3")
+        print(f"  {c.WHITE}3.{c.RESET} Create OAuth 2.0 credentials (Desktop app)")
+        print(f"  {c.WHITE}4.{c.RESET} Download the JSON and save as 'client_secrets.json'")
+        print(f"\n{c.DIM}See README.md for detailed instructions.{c.RESET}")
         return False
     
     # Display available videos
-    print(f"\n🎬 Available videos for upload:")
-    print("-" * 60)
+    print(f"\n{c.RED}{c.BOLD}📤 YouTube Upload Wizard{c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
     for idx, f in enumerate(video_files, 1):
         filepath = os.path.join(OUTPUT_PATH, f)
         size_mb = os.path.getsize(filepath) / (1024 * 1024)
-        print(f"  [{idx:2d}] {f} ({size_mb:.1f} MB)")
-    print("-" * 60)
+        print(f"  {c.GREEN}[{idx:2d}]{c.RESET} {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
     
     # Get user selection
     try:
@@ -907,10 +938,10 @@ def upload_interactive():
     try:
         idx = int(selection)
         if idx < 1 or idx > len(video_files):
-            print(f"❌ Invalid selection. Choose 1-{len(video_files)}")
+            print(f"{c.RED}❌ Invalid selection. Choose 1-{len(video_files)}{c.RESET}")
             return False
     except ValueError:
-        print("❌ Please enter a number.")
+        print(f"{c.RED}❌ Please enter a number.{c.RESET}")
         return False
     
     selected_file = video_files[idx - 1]
@@ -921,19 +952,19 @@ def upload_interactive():
     sources = []
     
     try:
-        print(f"\nSelected: {selected_file}")
-        print("-" * 40)
+        print(f"\n{c.CYAN}Selected:{c.RESET} {c.WHITE}{selected_file}{c.RESET}")
+        print(f"{c.DIM}{'─' * 40}{c.RESET}")
         
-        title = input(f"Title [{default_title}]: ").strip()
+        title = input(f"{c.CYAN}Title{c.RESET} [{default_title}]: ").strip()
         if not title:
             title = default_title
         
-        description = input("Description (optional): ").strip()
+        description = input(f"{c.CYAN}Description{c.RESET} (optional): ").strip()
         
         # Original sources for attribution
-        print("\nOriginal Sources (for attribution):")
-        print("  Enter source URLs or channel names, one per line.")
-        print("  Press Enter twice when done (or once to skip).")
+        print(f"\n{c.YELLOW}📎 Original Sources (for attribution):{c.RESET}")
+        print(f"  {c.DIM}Enter source URLs or channel names, one per line.")
+        print(f"  Press Enter twice when done (or once to skip).{c.RESET}")
         
         sources = []
         while True:
@@ -950,14 +981,14 @@ def upload_interactive():
             attribution += "\nAll rights belong to the original creators."
             description = description + attribution if description else attribution.strip()
         
-        tags_input = input("Tags (comma-separated, optional): ").strip()
+        tags_input = input(f"{c.CYAN}Tags{c.RESET} (comma-separated, optional): ").strip()
         tags = [t.strip() for t in tags_input.split(',') if t.strip()] if tags_input else []
         
-        print("\nPrivacy options:")
-        print("  private  - Only you can view (share with domain users after upload)")
-        print("  unlisted - Anyone with the link can view")
-        print("  public   - Anyone can find and view")
-        privacy = input("Privacy [private]: ").strip().lower()
+        print(f"\n{c.MAGENTA}🔒 Privacy options:{c.RESET}")
+        print(f"  {c.GREEN}private{c.RESET}  - Only you can view")
+        print(f"  {c.YELLOW}unlisted{c.RESET} - Anyone with the link can view")
+        print(f"  {c.RED}public{c.RESET}   - Anyone can find and view")
+        privacy = input(f"{c.CYAN}Privacy{c.RESET} [private]: ").strip().lower()
         if privacy not in ('public', 'unlisted', 'private'):
             privacy = 'private'
         
@@ -966,18 +997,18 @@ def upload_interactive():
         return False
     
     # Confirm
-    print(f"\n📋 Upload Details:")
-    print(f"   File: {selected_file}")
-    print(f"   Title: {title}")
+    print(f"\n{c.CYAN}{c.BOLD}📋 Upload Details:{c.RESET}")
+    print(f"   {c.WHITE}File:{c.RESET} {selected_file}")
+    print(f"   {c.WHITE}Title:{c.RESET} {title}")
     if sources:
         # Show original description without attribution for clarity
         orig_desc = description.split("\n\n---\n")[0] if "\n\n---\n" in description else description
-        print(f"   Description: {orig_desc or '(none)'}")
-        print(f"   Sources: {', '.join(sources)}")
+        print(f"   {c.WHITE}Description:{c.RESET} {orig_desc or '(none)'}")
+        print(f"   {c.WHITE}Sources:{c.RESET} {', '.join(sources)}")
     else:
-        print(f"   Description: {description or '(none)'}")
-    print(f"   Tags: {', '.join(tags) if tags else '(none)'}")
-    print(f"   Privacy: {privacy}")
+        print(f"   {c.WHITE}Description:{c.RESET} {description or '(none)'}")
+    print(f"   {c.WHITE}Tags:{c.RESET} {', '.join(tags) if tags else '(none)'}")
+    print(f"   {c.WHITE}Privacy:{c.RESET} {privacy}")
     
     try:
         confirm = input("\nProceed with upload? [Y/n]: ").strip().lower()
@@ -994,24 +1025,25 @@ def upload_interactive():
 
 def qr_interactive():
     """Interactive QR code generation."""
+    c = Colors
     try:
-        print("\n📱 QR Code Generator")
-        print("-" * 40)
+        print(f"\n{c.YELLOW}{c.BOLD}📱 QR Code Generator{c.RESET}")
+        print(f"{c.DIM}{'─' * 40}{c.RESET}")
         
-        url = input("Enter URL: ").strip()
+        url = input(f"{c.CYAN}Enter URL:{c.RESET} ").strip()
         if not url:
-            print("No URL provided.")
+            print(f"{c.YELLOW}No URL provided.{c.RESET}")
             return False
         
         default_name = "qr_code"
-        name = input(f"QR code name [{default_name}]: ").strip()
+        name = input(f"{c.CYAN}QR code name{c.RESET} [{default_name}]: ").strip()
         if not name:
             name = default_name
         
         filename = generate_qr_code(url, name)
         if filename:
-            print(f"\n✅ QR code saved: {filename}")
-            print(f"   Location: {OUTPUT_PATH}/{filename}")
+            print(f"\n{c.GREEN}✅ QR code saved:{c.RESET} {c.WHITE}{filename}{c.RESET}")
+            print(f"   {c.DIM}Location: {OUTPUT_PATH}/{filename}{c.RESET}")
             return True
         return False
         
@@ -1021,54 +1053,62 @@ def qr_interactive():
 
 
 def print_help():
-    """Print help message."""
-    print("""
-YouTube Downloader CLI
-======================
+    """Print help message with colors and icons."""
+    c = Colors
+    print(f"""
+{c.RED}╔{'═' * 48}╗{c.RESET}
+{c.RED}║{c.RESET}  {c.BOLD}{c.WHITE}📺  YouTube Downloader CLI{c.RESET}                    {c.RED}║{c.RESET}
+{c.RED}╚{'═' * 48}╝{c.RESET}
 
-Download Commands:
-  video <URL>    Download video (best quality MP4)
-  audio <URL>    Download audio only (MP3)
-  info <URL>     Get video information
+{c.CYAN}{c.BOLD}⬇️  Download Commands:{c.RESET}
+  {c.GREEN}video{c.RESET} <URL>    📥 Download video (best quality MP4)
+  {c.GREEN}audio{c.RESET} <URL>    🎵 Download audio only (MP3)
+  {c.GREEN}info{c.RESET} <URL>     ℹ️  Get video information
 
-File Management:
-  list           List downloaded files (numbered for stitching)
-  stitch         Stitch multiple videos together
+{c.MAGENTA}{c.BOLD}📁 File Management:{c.RESET}
+  {c.GREEN}list{c.RESET}           📋 List downloaded files
+  {c.GREEN}stitch{c.RESET}         🎬 Stitch multiple videos together
 
-YouTube Upload:
-  upload         Upload a video to YouTube
-  auth           Re-authenticate with YouTube
+{c.RED}{c.BOLD}📤 YouTube Upload:{c.RESET}
+  {c.GREEN}upload{c.RESET}         🚀 Upload a video to YouTube
+  {c.GREEN}auth{c.RESET}           🔑 Re-authenticate with YouTube/GCS
 
-Cloud Backup:
-  backup         Backup videos to Google Cloud Storage
+{c.BLUE}{c.BOLD}☁️  Cloud Backup:{c.RESET}
+  {c.GREEN}backup{c.RESET}         💾 Backup videos to Google Cloud Storage
 
-Utilities:
-  qr             Generate a QR code for any URL
+{c.YELLOW}{c.BOLD}🛠️  Utilities:{c.RESET}
+  {c.GREEN}qr{c.RESET}             📱 Generate a QR code for any URL
 
-Other:
-  help           Show this help message
-  exit           Exit the CLI
+{c.DIM}Other:{c.RESET}
+  {c.GREEN}help{c.RESET}           ❓ Show this help message
+  {c.GREEN}exit{c.RESET}           👋 Exit the CLI
 
-Examples:
-  video https://www.youtube.com/watch?v=dQw4w9WgXcQ
-  audio https://youtu.be/dQw4w9WgXcQ
-  stitch
-  upload
-  backup
-  qr
+{c.DIM}{'─' * 50}{c.RESET}
+{c.BOLD}Examples:{c.RESET}
+  {c.CYAN}video{c.RESET} https://www.youtube.com/watch?v=dQw4w9WgXcQ
+  {c.CYAN}audio{c.RESET} https://youtu.be/dQw4w9WgXcQ
+  {c.CYAN}stitch{c.RESET} → {c.CYAN}upload{c.RESET} → {c.CYAN}qr{c.RESET}
 """)
 
 
 def interactive_mode():
     """Run the interactive CLI mode."""
-    print("\n" + "=" * 50)
-    print("  YouTube Downloader CLI")
-    print("  Type 'help' for available commands")
-    print("=" * 50 + "\n")
+    c = Colors
+    print(f"""
+{c.RED}╔{'═' * 48}╗{c.RESET}
+{c.RED}║{c.RESET}                                                {c.RED}║{c.RESET}
+{c.RED}║{c.RESET}   {c.BOLD}{c.WHITE}📺  YouTube Downloader CLI  📺{c.RESET}               {c.RED}║{c.RESET}
+{c.RED}║{c.RESET}                                                {c.RED}║{c.RESET}
+{c.RED}║{c.RESET}   {c.DIM}Type '{c.GREEN}help{c.DIM}' for available commands{c.RESET}        {c.RED}║{c.RESET}
+{c.RED}║{c.RESET}                                                {c.RED}║{c.RESET}
+{c.RED}╚{'═' * 48}╝{c.RESET}
+""")
+    
+    prompt = f"{c.RED}ytd{c.RESET}{c.BOLD}{c.WHITE}>{c.RESET} "
     
     while True:
         try:
-            user_input = input("ytd> ").strip()
+            user_input = input(prompt).strip()
             
             if not user_input:
                 continue
@@ -1078,7 +1118,7 @@ def interactive_mode():
             args = parts[1] if len(parts) > 1 else ""
             
             if command in ('exit', 'quit', 'q'):
-                print("Goodbye!")
+                print(f"\n{c.YELLOW}👋 Goodbye!{c.RESET}\n")
                 break
             elif command == 'help':
                 print_help()
@@ -1090,48 +1130,48 @@ def interactive_mode():
                 upload_interactive()
             elif command == 'auth':
                 # Force re-authentication
-                print("\nRe-authenticate which service?")
-                print("  1. YouTube")
-                print("  2. Google Cloud Storage")
-                print("  3. Both")
-                choice = input("\nChoice [3]: ").strip() or "3"
+                print(f"\n{c.CYAN}{c.BOLD}🔑 Re-authenticate{c.RESET}")
+                print(f"  {c.GREEN}1.{c.RESET} YouTube")
+                print(f"  {c.GREEN}2.{c.RESET} Google Cloud Storage")
+                print(f"  {c.GREEN}3.{c.RESET} Both")
+                choice = input(f"\n{c.CYAN}Choice{c.RESET} [3]: ").strip() or "3"
                 
                 if choice in ('1', '3'):
                     if os.path.exists(OAUTH_TOKEN_FILE):
                         os.remove(OAUTH_TOKEN_FILE)
-                        print("✅ Cleared YouTube credentials.")
+                        print(f"{c.GREEN}✅ Cleared YouTube credentials.{c.RESET}")
                     get_authenticated_service()
                     
                 if choice in ('2', '3'):
                     if os.path.exists(GCS_TOKEN_FILE):
                         os.remove(GCS_TOKEN_FILE)
-                        print("✅ Cleared GCS credentials.")
+                        print(f"{c.GREEN}✅ Cleared GCS credentials.{c.RESET}")
                     if choice == '2':
                         get_gcs_credentials()
             elif command == 'qr':
                 if args:
                     # If URL provided directly, prompt for name only
-                    name = input("QR code name [qr_code]: ").strip() or "qr_code"
+                    name = input(f"{c.CYAN}QR code name{c.RESET} [qr_code]: ").strip() or "qr_code"
                     filename = generate_qr_code(args, name)
                     if filename:
-                        print(f"✅ QR code saved: {filename}")
+                        print(f"{c.GREEN}✅ QR code saved:{c.RESET} {c.WHITE}{filename}{c.RESET}")
                 else:
                     qr_interactive()
             elif command == 'backup':
                 backup_interactive()
             elif command == 'video':
                 if not args:
-                    print("Usage: video <URL>")
+                    print(f"{c.YELLOW}Usage:{c.RESET} video <URL>")
                 else:
                     download_video(args)
             elif command == 'audio':
                 if not args:
-                    print("Usage: audio <URL>")
+                    print(f"{c.YELLOW}Usage:{c.RESET} audio <URL>")
                 else:
                     download_audio_only(args)
             elif command == 'info':
                 if not args:
-                    print("Usage: info <URL>")
+                    print(f"{c.YELLOW}Usage:{c.RESET} info <URL>")
                 else:
                     get_video_info(args)
             else:
@@ -1139,13 +1179,13 @@ def interactive_mode():
                 if user_input.startswith(('http://', 'https://', 'www.')):
                     download_video(user_input)
                 else:
-                    print(f"Unknown command: {command}")
-                    print("Type 'help' for available commands")
+                    print(f"{c.RED}Unknown command:{c.RESET} {command}")
+                    print(f"{c.DIM}Type 'help' for available commands{c.RESET}")
                     
         except KeyboardInterrupt:
-            print("\nUse 'exit' to quit")
+            print(f"\n{c.DIM}Use 'exit' to quit{c.RESET}")
         except EOFError:
-            print("\nGoodbye!")
+            print(f"\n{c.YELLOW}👋 Goodbye!{c.RESET}")
             break
 
 
