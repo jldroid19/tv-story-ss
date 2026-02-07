@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 IMAGE_NAME="yt-downloader"
 CONTAINER_NAME="yt-downloader-cli"
 
@@ -20,7 +23,7 @@ read -p "   Press Enter to continue or Ctrl+C to cancel..."
 echo ""
 
 # Check for client_secrets.json
-if [ ! -f "client_secrets.json" ]; then
+if [ ! -f "$SCRIPT_DIR/client_secrets.json" ]; then
     echo "⚠️  Warning: client_secrets.json not found."
     echo "   YouTube upload feature will not work without it."
     echo "   See README.md for setup instructions."
@@ -28,7 +31,7 @@ if [ ! -f "client_secrets.json" ]; then
 fi
 
 echo "🔨 Building image..."
-$RUNTIME build -t $IMAGE_NAME .
+$RUNTIME build -t $IMAGE_NAME "$SCRIPT_DIR"
 
 if [ $? -ne 0 ]; then
     echo "❌ Build failed!"
@@ -65,8 +68,8 @@ echo ""
 # Run container interactively with volume mounts
 $RUNTIME run -it --rm \
     --name $CONTAINER_NAME \
-    -v "$(pwd)/downloads:/app/downloads" \
-    -v "$(pwd)/credentials:/app/credentials" \
-    -v "$(pwd)/client_secrets.json:/app/client_secrets.json:ro" \
+    -v "$SCRIPT_DIR/downloads:/app/downloads" \
+    -v "$SCRIPT_DIR/credentials:/app/credentials" \
+    -v "$SCRIPT_DIR/client_secrets.json:/app/client_secrets.json:ro" \
     -p 8080:8080 \
     $IMAGE_NAME

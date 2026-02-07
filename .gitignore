@@ -29,3 +29,6 @@ Thumbs.db
 # YouTube OAuth credentials (generated after first auth)
 client_secrets.json
 *.pickle
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.github/instructions/snyk_rules.instructions.md
