@@ -1,0 +1,31 @@
+# Environment
+.env
+.env.local
+
+# Downloads folder
+downloads/
+
+# Credentials (except .gitkeep)
+credentials/*
+!credentials/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+
+# Temp files
+*.tmp
+temp-audio.m4a
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# YouTube OAuth credentials (generated after first auth)
+client_secrets.json
+*.pickle
