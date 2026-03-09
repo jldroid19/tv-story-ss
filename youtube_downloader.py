@@ -382,13 +382,13 @@ def strip_audio_interactive():
         return False
 
     # Display available videos
-    print(f"\n{c.MAGENTA}{c.BOLD}\ud83d\udd07 Strip Audio{c.RESET} {c.DIM}({WORK_PATH}){c.RESET}")
-    print(f"{c.DIM}{'\u2500' * 60}{c.RESET}")
+    print(f"\n{c.MAGENTA}{c.BOLD}🔇 Strip Audio{c.RESET} {c.DIM}({WORK_PATH}){c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
     for idx, f in enumerate(video_files, 1):
         filepath = os.path.join(WORK_PATH, f)
         size_mb = os.path.getsize(filepath) / (1024 * 1024)
         print(f"  {c.GREEN}[{idx:2d}]{c.RESET} {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
-    print(f"{c.DIM}{'\u2500' * 60}{c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
 
     try:
         selection = input("\nSelect video to strip audio from (number): ").strip()
@@ -427,7 +427,7 @@ def strip_audio_interactive():
 
     output_path = os.path.join(WORK_PATH, output_name)
 
-    print(f"\n{c.CYAN}{c.BOLD}\ud83d\udccb Strip Audio:{c.RESET}")
+    print(f"\n{c.CYAN}{c.BOLD}📋 Strip Audio:{c.RESET}")
     print(f"   {c.WHITE}Input:{c.RESET}  {selected_file}")
     print(f"   {c.WHITE}Output:{c.RESET} {output_name}")
 
@@ -441,7 +441,7 @@ def strip_audio_interactive():
         print("Cancelled.")
         return False
 
-    print(f"\n{c.YELLOW}\ud83d\udd04 Stripping audio...{c.RESET}")
+    print(f"\n{c.YELLOW}🔄 Stripping audio...{c.RESET}")
     try:
         clip = VideoFileClip(input_path)
         clip_no_audio = clip.without_audio()
@@ -454,10 +454,10 @@ def strip_audio_interactive():
         clip.close()
 
         output_size = os.path.getsize(output_path) / (1024 * 1024)
-        print(f"\n{c.GREEN}\u2705 Created:{c.RESET} {c.WHITE}{output_name}{c.RESET} {c.DIM}({output_size:.1f} MB){c.RESET}")
+        print(f"\n{c.GREEN}✅ Created:{c.RESET} {c.WHITE}{output_name}{c.RESET} {c.DIM}({output_size:.1f} MB){c.RESET}")
         return True
     except Exception as e:
-        print(f"\n{c.RED}\u274c Error stripping audio:{c.RESET} {e}")
+        print(f"\n{c.RED}❌ Error stripping audio:{c.RESET} {e}")
         return False
 
 
