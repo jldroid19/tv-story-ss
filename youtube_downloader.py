@@ -39,6 +39,7 @@ class Colors:
 
 
 OUTPUT_PATH = "/app/downloads"
+WORK_PATH = OUTPUT_PATH  # Current working folder (can be a subdirectory)
 CREDENTIALS_PATH = "/app/credentials"
 CLIENT_SECRETS_FILE = "/app/client_secrets.json"
 OAUTH_TOKEN_FILE = os.path.join(CREDENTIALS_PATH, "youtube_oauth.pickle")
@@ -55,13 +56,69 @@ MAX_RETRIES = 10
 RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
 
 
+def set_project(name: str = None):
+    """Set the working folder to a subdirectory of downloads."""
+    global WORK_PATH
+    c = Colors
+
+    if name is None:
+        # Reset to root downloads folder
+        WORK_PATH = OUTPUT_PATH
+        print(f"{c.GREEN}✅ Working folder set to:{c.RESET} {c.WHITE}{WORK_PATH}{c.RESET}")
+        return True
+
+    # Sanitize: only allow simple subdirectory names (no path traversal)
+    safe_name = os.path.basename(name)
+    if not safe_name or safe_name in ('.', '..'):
+        print(f"{c.RED}❌ Invalid folder name.{c.RESET}")
+        return False
+
+    target = os.path.join(OUTPUT_PATH, safe_name)
+    os.makedirs(target, exist_ok=True)
+    WORK_PATH = target
+    print(f"{c.GREEN}✅ Working folder set to:{c.RESET} {c.WHITE}{WORK_PATH}{c.RESET}")
+    return True
+
+
+def list_projects():
+    """List subdirectories in the downloads folder."""
+    c = Colors
+    if not os.path.exists(OUTPUT_PATH):
+        print(f"{c.YELLOW}📭 No downloads folder yet.{c.RESET}")
+        return
+
+    dirs = sorted(d for d in os.listdir(OUTPUT_PATH)
+                  if os.path.isdir(os.path.join(OUTPUT_PATH, d)))
+
+    print(f"\n{c.CYAN}{c.BOLD}📂 Projects{c.RESET} {c.DIM}(subfolders in {OUTPUT_PATH}){c.RESET}")
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
+
+    # Show root folder
+    root_videos = len([f for f in os.listdir(OUTPUT_PATH)
+                       if os.path.isfile(os.path.join(OUTPUT_PATH, f))
+                       and f.lower().endswith(VIDEO_EXTENSIONS)])
+    marker = f" {c.YELLOW}◀ active{c.RESET}" if WORK_PATH == OUTPUT_PATH else ""
+    print(f"  {c.GREEN}[root]{c.RESET}  {c.WHITE}/ (downloads root){c.RESET} {c.DIM}({root_videos} videos){c.RESET}{marker}")
+
+    for d in dirs:
+        full = os.path.join(OUTPUT_PATH, d)
+        vid_count = len([f for f in os.listdir(full)
+                         if os.path.isfile(os.path.join(full, f))
+                         and f.lower().endswith(VIDEO_EXTENSIONS)])
+        marker = f" {c.YELLOW}◀ active{c.RESET}" if WORK_PATH == full else ""
+        print(f"  {c.GREEN}[ {d} ]{c.RESET}  {c.DIM}({vid_count} videos){c.RESET}{marker}")
+
+    print(f"{c.DIM}{'─' * 60}{c.RESET}")
+    print(f"\n{c.DIM}Switch with:{c.RESET} {c.CYAN}project <name>{c.RESET}  |  {c.CYAN}project root{c.RESET} to go back")
+
+
 def download_video(url: str, quality: str = "best"):
     """Download a YouTube video."""
     c = Colors
-    os.makedirs(OUTPUT_PATH, exist_ok=True)
+    os.makedirs(WORK_PATH, exist_ok=True)
     
     ydl_opts = {
-        'outtmpl': os.path.join(OUTPUT_PATH, '%(title)s.%(ext)s'),
+        'outtmpl': os.path.join(WORK_PATH, '%(title)s.%(ext)s'),
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' if quality == 'best' else quality,
         'merge_output_format': 'mp4',
         'progress_hooks': [progress_hook],
@@ -72,7 +129,7 @@ def download_video(url: str, quality: str = "best"):
             print(f"\n{c.CYAN}🔍 Fetching video info for:{c.RESET} {url}")
             info = ydl.extract_info(url, download=True)
             print(f"\n{c.GREEN}✅ Downloaded:{c.RESET} {c.WHITE}{info.get('title', 'Unknown')}{c.RESET}")
-            print(f"{c.CYAN}📁 Saved to:{c.RESET} {OUTPUT_PATH}")
+            print(f"{c.CYAN}📁 Saved to:{c.RESET} {WORK_PATH}")
             return True
     except Exception as e:
         print(f"\n{c.RED}❌ Error downloading video:{c.RESET} {e}")
@@ -93,10 +150,10 @@ def progress_hook(d):
 def download_audio_only(url: str):
     """Download only the audio from a YouTube video as MP3."""
     c = Colors
-    os.makedirs(OUTPUT_PATH, exist_ok=True)
+    os.makedirs(WORK_PATH, exist_ok=True)
     
     ydl_opts = {
-        'outtmpl': os.path.join(OUTPUT_PATH, '%(title)s.%(ext)s'),
+        'outtmpl': os.path.join(WORK_PATH, '%(title)s.%(ext)s'),
         'format': 'bestaudio/best',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
@@ -111,7 +168,7 @@ def download_audio_only(url: str):
             print(f"\n{c.CYAN}🔍 Fetching audio for:{c.RESET} {url}")
             info = ydl.extract_info(url, download=True)
             print(f"\n{c.GREEN}✅ Downloaded audio:{c.RESET} {c.WHITE}{info.get('title', 'Unknown')}{c.RESET}")
-            print(f"{c.CYAN}📁 Saved to:{c.RESET} {OUTPUT_PATH}")
+            print(f"{c.CYAN}📁 Saved to:{c.RESET} {WORK_PATH}")
             return True
     except Exception as e:
         print(f"\n{c.RED}❌ Error downloading audio:{c.RESET} {e}")
@@ -141,36 +198,39 @@ def get_video_info(url: str):
 
 
 def get_video_files():
-    """Get list of video files in downloads folder."""
-    if not os.path.exists(OUTPUT_PATH):
+    """Get list of video files in current working folder."""
+    if not os.path.exists(WORK_PATH):
         return []
     
     files = []
-    for f in sorted(os.listdir(OUTPUT_PATH)):
-        if f.lower().endswith(VIDEO_EXTENSIONS):
+    for f in sorted(os.listdir(WORK_PATH)):
+        if os.path.isfile(os.path.join(WORK_PATH, f)) and f.lower().endswith(VIDEO_EXTENSIONS):
             files.append(f)
     return files
 
 
 def list_downloads():
-    """List all downloaded files."""
+    """List all downloaded files in current working folder."""
     c = Colors
-    if not os.path.exists(OUTPUT_PATH):
+    if not os.path.exists(WORK_PATH):
         print(f"{c.YELLOW}📭 No downloads yet.{c.RESET}")
         return
     
-    files = os.listdir(OUTPUT_PATH)
-    if not files:
-        print(f"{c.YELLOW}📭 No downloads yet.{c.RESET}")
+    files = [f for f in os.listdir(WORK_PATH) if os.path.isfile(os.path.join(WORK_PATH, f))]
+    subdirs = [d for d in os.listdir(WORK_PATH) if os.path.isdir(os.path.join(WORK_PATH, d))]
+    if not files and not subdirs:
+        print(f"{c.YELLOW}📭 No files yet.{c.RESET}")
         return
     
-    print(f"\n{c.CYAN}{c.BOLD}📁 Downloads{c.RESET} {c.DIM}({OUTPUT_PATH}){c.RESET}")
+    print(f"\n{c.CYAN}{c.BOLD}📁 Files{c.RESET} {c.DIM}({WORK_PATH}){c.RESET}")
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
+    # Show subdirectories first
+    for d in sorted(subdirs):
+        print(f"       📂 {c.CYAN}{d}/{c.RESET}")
     for idx, f in enumerate(sorted(files), 1):
-        filepath = os.path.join(OUTPUT_PATH, f)
+        filepath = os.path.join(WORK_PATH, f)
         size = os.path.getsize(filepath)
         size_mb = size / (1024 * 1024)
-        # Mark video files with index for stitching
         if f.lower().endswith(VIDEO_EXTENSIONS):
             print(f"  {c.GREEN}[{idx:2d}]{c.RESET} 🎬 {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
         else:
@@ -186,14 +246,14 @@ def stitch_videos(output_name: str = None):
     video_files = get_video_files()
     
     if not video_files:
-        print(f"{c.RED}❌ No video files found in downloads folder.{c.RESET}")
+        print(f"{c.RED}❌ No video files found in {WORK_PATH}{c.RESET}")
         return False
     
     # Display available videos
-    print(f"\n{c.MAGENTA}{c.BOLD}🎬 Available videos for stitching:{c.RESET}")
+    print(f"\n{c.MAGENTA}{c.BOLD}🎬 Available videos for stitching:{c.RESET} {c.DIM}({WORK_PATH}){c.RESET}")
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
     for idx, f in enumerate(video_files, 1):
-        filepath = os.path.join(OUTPUT_PATH, f)
+        filepath = os.path.join(WORK_PATH, f)
         size_mb = os.path.getsize(filepath) / (1024 * 1024)
         print(f"  {c.GREEN}[{idx:2d}]{c.RESET} {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
@@ -248,7 +308,7 @@ def stitch_videos(output_name: str = None):
     if not output_name.endswith('.mp4'):
         output_name += '.mp4'
     
-    output_path = os.path.join(OUTPUT_PATH, output_name)
+    output_path = os.path.join(WORK_PATH, output_name)
     
     # Confirm
     print(f"\n{c.CYAN}{c.BOLD}📋 Stitch order:{c.RESET}")
@@ -272,7 +332,7 @@ def stitch_videos(output_name: str = None):
     
     try:
         for i, filename in enumerate(selected_files, 1):
-            filepath = os.path.join(OUTPUT_PATH, filename)
+            filepath = os.path.join(WORK_PATH, filename)
             print(f"   {c.DIM}Loading [{i}/{len(selected_files)}]:{c.RESET} {filename}")
             clip = VideoFileClip(filepath)
             clips.append(clip)
@@ -310,6 +370,97 @@ def stitch_videos(output_name: str = None):
         return False
 
 
+def strip_audio_interactive():
+    """Interactive command to strip audio from a video file."""
+    from moviepy import VideoFileClip
+
+    c = Colors
+    video_files = get_video_files()
+
+    if not video_files:
+        print(f"{c.RED}\u274c No video files found in {WORK_PATH}{c.RESET}")
+        return False
+
+    # Display available videos
+    print(f"\n{c.MAGENTA}{c.BOLD}\ud83d\udd07 Strip Audio{c.RESET} {c.DIM}({WORK_PATH}){c.RESET}")
+    print(f"{c.DIM}{'\u2500' * 60}{c.RESET}")
+    for idx, f in enumerate(video_files, 1):
+        filepath = os.path.join(WORK_PATH, f)
+        size_mb = os.path.getsize(filepath) / (1024 * 1024)
+        print(f"  {c.GREEN}[{idx:2d}]{c.RESET} {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
+    print(f"{c.DIM}{'\u2500' * 60}{c.RESET}")
+
+    try:
+        selection = input("\nSelect video to strip audio from (number): ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print("\nCancelled.")
+        return False
+
+    if not selection:
+        print("No video selected.")
+        return False
+
+    try:
+        idx = int(selection)
+        if idx < 1 or idx > len(video_files):
+            print(f"{c.RED}\u274c Invalid selection. Choose 1-{len(video_files)}{c.RESET}")
+            return False
+    except ValueError:
+        print(f"{c.RED}\u274c Please enter a number.{c.RESET}")
+        return False
+
+    selected_file = video_files[idx - 1]
+    input_path = os.path.join(WORK_PATH, selected_file)
+    name, ext = os.path.splitext(selected_file)
+    default_output = f"{name}_noaudio{ext}"
+
+    try:
+        output_name = input(f"{c.CYAN}Output filename{c.RESET} [{default_output}]: ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print("\nCancelled.")
+        return False
+
+    if not output_name:
+        output_name = default_output
+    if not output_name.lower().endswith(VIDEO_EXTENSIONS):
+        output_name += ext
+
+    output_path = os.path.join(WORK_PATH, output_name)
+
+    print(f"\n{c.CYAN}{c.BOLD}\ud83d\udccb Strip Audio:{c.RESET}")
+    print(f"   {c.WHITE}Input:{c.RESET}  {selected_file}")
+    print(f"   {c.WHITE}Output:{c.RESET} {output_name}")
+
+    try:
+        confirm = input("\nProceed? [Y/n]: ").strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        print("\nCancelled.")
+        return False
+
+    if confirm and confirm not in ('y', 'yes'):
+        print("Cancelled.")
+        return False
+
+    print(f"\n{c.YELLOW}\ud83d\udd04 Stripping audio...{c.RESET}")
+    try:
+        clip = VideoFileClip(input_path)
+        clip_no_audio = clip.without_audio()
+        clip_no_audio.write_videofile(
+            output_path,
+            codec='libx264',
+            logger='bar'
+        )
+        clip_no_audio.close()
+        clip.close()
+
+        output_size = os.path.getsize(output_path) / (1024 * 1024)
+        print(f"\n{c.GREEN}\u2705 Created:{c.RESET} {c.WHITE}{output_name}{c.RESET} {c.DIM}({output_size:.1f} MB){c.RESET}")
+        return True
+    except Exception as e:
+        print(f"\n{c.RED}\u274c Error stripping audio:{c.RESET} {e}")
+        return False
+
+
 def generate_qr_code(url: str, title: str) -> str:
     """Generate a QR code image for a URL and save to downloads folder."""
     import qrcode
@@ -334,7 +485,7 @@ def generate_qr_code(url: str, title: str) -> str:
         safe_title = re.sub(r'[-\s]+', '_', safe_title)
         
         filename = f"{safe_title}_qr.png"
-        filepath = os.path.join(OUTPUT_PATH, filename)
+        filepath = os.path.join(WORK_PATH, filename)
         
         img.save(filepath)
         return filename
@@ -587,7 +738,7 @@ def backup_interactive():
     video_files = get_video_files()
     
     if not video_files:
-        print(f"{c.RED}❌ No video files found in downloads folder.{c.RESET}")
+        print(f"{c.RED}❌ No video files found in {WORK_PATH}{c.RESET}")
         return False
     
     # Get credentials
@@ -602,10 +753,10 @@ def backup_interactive():
         return False
     
     # Display available videos
-    print(f"\n{c.BLUE}{c.BOLD}☁️  Cloud Backup{c.RESET}")
+    print(f"\n{c.BLUE}{c.BOLD}☁️  Cloud Backup{c.RESET} {c.DIM}({WORK_PATH}){c.RESET}")
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
     for idx, f in enumerate(video_files, 1):
-        filepath = os.path.join(OUTPUT_PATH, f)
+        filepath = os.path.join(WORK_PATH, f)
         size_mb = os.path.getsize(filepath) / (1024 * 1024)
         print(f"  {c.GREEN}[{idx:2d}]{c.RESET} {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
@@ -661,7 +812,7 @@ def backup_interactive():
     success_count = 0
     
     for filename in selected_files:
-        filepath = os.path.join(OUTPUT_PATH, filename)
+        filepath = os.path.join(WORK_PATH, filename)
         if backup_to_gcs(filepath, bucket_name, credentials):
             success_count += 1
     
@@ -901,7 +1052,7 @@ def upload_interactive():
     video_files = get_video_files()
     
     if not video_files:
-        print(f"{c.RED}❌ No video files found in downloads folder.{c.RESET}")
+        print(f"{c.RED}❌ No video files found in {WORK_PATH}{c.RESET}")
         return False
     
     # Check for client_secrets.json
@@ -916,10 +1067,10 @@ def upload_interactive():
         return False
     
     # Display available videos
-    print(f"\n{c.RED}{c.BOLD}📤 YouTube Upload Wizard{c.RESET}")
+    print(f"\n{c.RED}{c.BOLD}📤 YouTube Upload Wizard{c.RESET} {c.DIM}({WORK_PATH}){c.RESET}")
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
     for idx, f in enumerate(video_files, 1):
-        filepath = os.path.join(OUTPUT_PATH, f)
+        filepath = os.path.join(WORK_PATH, f)
         size_mb = os.path.getsize(filepath) / (1024 * 1024)
         print(f"  {c.GREEN}[{idx:2d}]{c.RESET} {c.WHITE}{f}{c.RESET} {c.DIM}({size_mb:.1f} MB){c.RESET}")
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
@@ -945,7 +1096,7 @@ def upload_interactive():
         return False
     
     selected_file = video_files[idx - 1]
-    filepath = os.path.join(OUTPUT_PATH, selected_file)
+    filepath = os.path.join(WORK_PATH, selected_file)
     
     # Get video details
     default_title = os.path.splitext(selected_file)[0]
@@ -1043,7 +1194,7 @@ def qr_interactive():
         filename = generate_qr_code(url, name)
         if filename:
             print(f"\n{c.GREEN}✅ QR code saved:{c.RESET} {c.WHITE}{filename}{c.RESET}")
-            print(f"   {c.DIM}Location: {OUTPUT_PATH}/{filename}{c.RESET}")
+            print(f"   {c.DIM}Location: {WORK_PATH}/{filename}{c.RESET}")
             return True
         return False
         
@@ -1066,8 +1217,11 @@ def print_help():
   {c.GREEN}info{c.RESET} <URL>     ℹ️  Get video information
 
 {c.MAGENTA}{c.BOLD}📁 File Management:{c.RESET}
-  {c.GREEN}list{c.RESET}           📋 List downloaded files
+  {c.GREEN}list{c.RESET}           📋 List files in current folder
+  {c.GREEN}project{c.RESET}        📂 List / switch project folders
+  {c.GREEN}project{c.RESET} <name> 📂 Switch to (or create) a subfolder
   {c.GREEN}stitch{c.RESET}         🎬 Stitch multiple videos together
+  {c.GREEN}strip-audio{c.RESET}    🔇 Strip audio from a video
 
 {c.RED}{c.BOLD}📤 YouTube Upload:{c.RESET}
   {c.GREEN}upload{c.RESET}         🚀 Upload a video to YouTube
@@ -1087,13 +1241,19 @@ def print_help():
 {c.BOLD}Examples:{c.RESET}
   {c.CYAN}video{c.RESET} https://www.youtube.com/watch?v=dQw4w9WgXcQ
   {c.CYAN}audio{c.RESET} https://youtu.be/dQw4w9WgXcQ
-  {c.CYAN}stitch{c.RESET} → {c.CYAN}upload{c.RESET} → {c.CYAN}qr{c.RESET}
+  {c.CYAN}project{c.RESET} my-compilation → {c.CYAN}stitch{c.RESET} → {c.CYAN}upload{c.RESET} → {c.CYAN}qr{c.RESET}
 """)
 
 
 def interactive_mode():
     """Run the interactive CLI mode."""
     c = Colors
+
+    # Auto-select project folder from environment variable (set by run.sh)
+    project_env = os.environ.get('PROJECT_DIR')
+    if project_env:
+        set_project(project_env)
+
     print(f"""
 {c.RED}╔{'═' * 48}╗{c.RESET}
 {c.RED}║{c.RESET}                                                {c.RED}║{c.RESET}
@@ -1104,9 +1264,14 @@ def interactive_mode():
 {c.RED}╚{'═' * 48}╝{c.RESET}
 """)
     
-    prompt = f"{c.RED}ytd{c.RESET}{c.BOLD}{c.WHITE}>{c.RESET} "
-    
     while True:
+        # Build prompt showing current project folder
+        if WORK_PATH == OUTPUT_PATH:
+            folder_label = ""
+        else:
+            folder_label = f" {c.CYAN}{os.path.basename(WORK_PATH)}{c.RESET}"
+        prompt = f"{c.RED}ytd{c.RESET}{folder_label}{c.BOLD}{c.WHITE}>{c.RESET} "
+
         try:
             user_input = input(prompt).strip()
             
@@ -1124,8 +1289,17 @@ def interactive_mode():
                 print_help()
             elif command == 'list':
                 list_downloads()
+            elif command in ('project', 'proj', 'folder'):
+                if not args:
+                    list_projects()
+                elif args.lower() == 'root':
+                    set_project(None)
+                else:
+                    set_project(args)
             elif command == 'stitch':
                 stitch_videos(args if args else None)
+            elif command in ('strip-audio', 'strip', 'noaudio', 'mute'):
+                strip_audio_interactive()
             elif command == 'upload':
                 upload_interactive()
             elif command == 'auth':
