@@ -14,6 +14,8 @@ import pickle
 import http.client
 import httplib2
 import random
+import subprocess
+import tempfile
 import time
 
 
@@ -46,6 +48,10 @@ OAUTH_TOKEN_FILE = os.path.join(CREDENTIALS_PATH, "youtube_oauth.pickle")
 GCS_TOKEN_FILE = os.path.join(CREDENTIALS_PATH, "gcs_oauth.pickle")
 GCS_BUCKET_FILE = os.path.join(CREDENTIALS_PATH, "gcs_bucket.txt")
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.webm', '.avi', '.mov')
+HOST_ROOT_MAPPINGS = []
+EXTERNAL_PROJECT_PATH = ""
+EXTERNAL_PROJECT_LABEL = ""
+EXTERNAL_PROJECT_SOURCE = ""
 
 # YouTube API settings
 YOUTUBE_API_SERVICE_NAME = "youtube"
@@ -54,6 +60,128 @@ YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 GCS_SCOPE = "https://www.googleapis.com/auth/devstorage.read_write"
 MAX_RETRIES = 10
 RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
+
+
+def normalize_optional_path(path: str) -> str:
+    """Normalize a path string while preserving empty values."""
+    path = (path or "").strip()
+    return os.path.normpath(path) if path else ""
+
+
+def load_host_root_mappings():
+    """Load host-to-container root mappings from the environment."""
+    mappings = []
+    raw_mappings = os.environ.get("HOST_ROOT_MAPPINGS", "").strip()
+    if not raw_mappings:
+        return mappings
+
+    for entry in raw_mappings.split(";"):
+        if not entry or "=" not in entry:
+            continue
+        host_root, container_root = entry.split("=", 1)
+        host_root = normalize_optional_path(host_root)
+        container_root = normalize_optional_path(container_root)
+        if host_root and container_root:
+            mappings.append((host_root, container_root))
+
+    return mappings
+
+
+HOST_ROOT_MAPPINGS = load_host_root_mappings()
+EXTERNAL_PROJECT_PATH = normalize_optional_path(os.environ.get("PROJECT_DIR", ""))
+EXTERNAL_PROJECT_LABEL = os.environ.get("PROJECT_LABEL", "").strip()
+EXTERNAL_PROJECT_SOURCE = normalize_optional_path(os.environ.get("PROJECT_SOURCE_PATH", ""))
+
+
+def is_within_directory(path: str, directory: str) -> bool:
+    """Return True when path is the same as or nested inside directory."""
+    if not path or not directory:
+        return False
+
+    try:
+        return os.path.commonpath([os.path.abspath(path), os.path.abspath(directory)]) == os.path.abspath(directory)
+    except ValueError:
+        return False
+
+
+def translate_host_path_to_container(host_path: str) -> str:
+    """Translate an absolute host path into the matching mounted container path."""
+    normalized = normalize_optional_path(host_path)
+    if not normalized or not os.path.isabs(normalized):
+        return ""
+
+    for host_root, container_root in HOST_ROOT_MAPPINGS:
+        if normalized == host_root:
+            return container_root
+        if normalized.startswith(host_root + os.sep):
+            return os.path.join(container_root, normalized[len(host_root) + 1:])
+
+    return ""
+
+
+def translate_container_path_to_host(container_path: str) -> str:
+    """Translate a mounted container path back to its host path when possible."""
+    normalized = normalize_optional_path(container_path)
+    if not normalized:
+        return ""
+
+    for host_root, container_root in HOST_ROOT_MAPPINGS:
+        if normalized == container_root:
+            return host_root
+        if normalized.startswith(container_root + os.sep):
+            return os.path.join(host_root, normalized[len(container_root) + 1:])
+
+    return ""
+
+
+def set_external_project(host_path: str) -> bool:
+    """Switch the working folder to a host-mounted external directory."""
+    global WORK_PATH, EXTERNAL_PROJECT_PATH, EXTERNAL_PROJECT_LABEL, EXTERNAL_PROJECT_SOURCE
+    c = Colors
+
+    normalized_host_path = normalize_optional_path(host_path)
+    if not normalized_host_path or not os.path.isabs(normalized_host_path):
+        print(f"{c.RED}❌ Please provide an absolute host path.{c.RESET}")
+        return False
+
+    container_path = translate_host_path_to_container(normalized_host_path)
+    if not container_path:
+        roots = ", ".join(host_root for host_root, _ in HOST_ROOT_MAPPINGS) or "(none configured)"
+        print(f"{c.RED}❌ Path is outside the shared host roots.{c.RESET}")
+        print(f"{c.DIM}   Allowed roots: {roots}{c.RESET}")
+        return False
+
+    if not os.path.isdir(container_path):
+        print(f"{c.RED}❌ Folder not found:{c.RESET} {normalized_host_path}")
+        return False
+
+    EXTERNAL_PROJECT_PATH = container_path
+    EXTERNAL_PROJECT_SOURCE = normalized_host_path
+    EXTERNAL_PROJECT_LABEL = os.path.basename(normalized_host_path) or normalized_host_path
+    WORK_PATH = container_path
+
+    print(f"{c.GREEN}✅ Working folder set to:{c.RESET} {c.WHITE}{WORK_PATH}{c.RESET}")
+    print(f"{c.DIM}   Host path: {EXTERNAL_PROJECT_SOURCE}{c.RESET}")
+    return True
+
+
+def get_mounted_project_aliases():
+    """Return names that should switch to the mounted host project."""
+    aliases = {"external", "mounted", "host"}
+    if EXTERNAL_PROJECT_LABEL:
+        aliases.add(EXTERNAL_PROJECT_LABEL.lower())
+    return aliases
+
+
+def get_folder_label(path: str = None) -> str:
+    """Return a human-readable label for the active folder."""
+    current_path = path or WORK_PATH
+
+    if current_path == OUTPUT_PATH:
+        return "root"
+    if EXTERNAL_PROJECT_PATH and is_within_directory(current_path, EXTERNAL_PROJECT_PATH):
+        return EXTERNAL_PROJECT_LABEL or os.path.basename(EXTERNAL_PROJECT_PATH)
+    return os.path.basename(current_path)
 
 
 def set_project(name: str = None):
@@ -67,16 +195,39 @@ def set_project(name: str = None):
         print(f"{c.GREEN}✅ Working folder set to:{c.RESET} {c.WHITE}{WORK_PATH}{c.RESET}")
         return True
 
-    # Sanitize: only allow simple subdirectory names (no path traversal)
-    safe_name = os.path.basename(name)
-    if not safe_name or safe_name in ('.', '..'):
+    raw_name = name.strip()
+    if not raw_name:
         print(f"{c.RED}❌ Invalid folder name.{c.RESET}")
         return False
 
-    target = os.path.join(OUTPUT_PATH, safe_name)
+    if EXTERNAL_PROJECT_PATH and raw_name.lower() in get_mounted_project_aliases():
+        target = EXTERNAL_PROJECT_PATH
+    elif os.path.isabs(raw_name):
+        normalized = os.path.normpath(raw_name)
+        translated = translate_host_path_to_container(normalized)
+        if translated:
+            return set_external_project(normalized)
+        if EXTERNAL_PROJECT_PATH and is_within_directory(normalized, EXTERNAL_PROJECT_PATH):
+            target = normalized
+        else:
+            print(f"{c.RED}❌ Only paths inside /app/downloads or the shared host roots are allowed.{c.RESET}")
+            return False
+    else:
+        normalized = os.path.normpath(raw_name)
+        if normalized in ('.', '..') or normalized.startswith(f"..{os.sep}"):
+            print(f"{c.RED}❌ Invalid folder name.{c.RESET}")
+            return False
+        target = os.path.join(OUTPUT_PATH, normalized)
+
     os.makedirs(target, exist_ok=True)
     WORK_PATH = target
     print(f"{c.GREEN}✅ Working folder set to:{c.RESET} {c.WHITE}{WORK_PATH}{c.RESET}")
+    host_path = translate_container_path_to_host(target)
+    if host_path:
+        EXTERNAL_PROJECT_PATH = target
+        EXTERNAL_PROJECT_SOURCE = host_path
+        EXTERNAL_PROJECT_LABEL = os.path.basename(host_path) or host_path
+        print(f"{c.DIM}   Host path: {EXTERNAL_PROJECT_SOURCE}{c.RESET}")
     return True
 
 
@@ -108,8 +259,21 @@ def list_projects():
         marker = f" {c.YELLOW}◀ active{c.RESET}" if WORK_PATH == full else ""
         print(f"  {c.GREEN}[ {d} ]{c.RESET}  {c.DIM}({vid_count} videos){c.RESET}{marker}")
 
+    if EXTERNAL_PROJECT_PATH and os.path.isdir(EXTERNAL_PROJECT_PATH):
+        vid_count = len([f for f in os.listdir(EXTERNAL_PROJECT_PATH)
+                         if os.path.isfile(os.path.join(EXTERNAL_PROJECT_PATH, f))
+                         and f.lower().endswith(VIDEO_EXTENSIONS)])
+        marker = f" {c.YELLOW}◀ active{c.RESET}" if is_within_directory(WORK_PATH, EXTERNAL_PROJECT_PATH) else ""
+        label = EXTERNAL_PROJECT_LABEL or os.path.basename(EXTERNAL_PROJECT_PATH)
+        print(f"  {c.BLUE}[external]{c.RESET} {c.WHITE}{label}{c.RESET} {c.DIM}({vid_count} videos){c.RESET}{marker}")
+        if EXTERNAL_PROJECT_SOURCE:
+            print(f"      {c.DIM}{EXTERNAL_PROJECT_SOURCE}{c.RESET}")
+
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
-    print(f"\n{c.DIM}Switch with:{c.RESET} {c.CYAN}project <name>{c.RESET}  |  {c.CYAN}project root{c.RESET} to go back")
+    if HOST_ROOT_MAPPINGS:
+        print(f"\n{c.DIM}Switch with:{c.RESET} {c.CYAN}project <name>{c.RESET}  |  {c.CYAN}project external /path/to/folder{c.RESET}  |  {c.CYAN}project root{c.RESET}")
+    else:
+        print(f"\n{c.DIM}Switch with:{c.RESET} {c.CYAN}project <name>{c.RESET}  |  {c.CYAN}project root{c.RESET} to go back")
 
 
 def download_video(url: str, quality: str = "best"):
@@ -238,10 +402,31 @@ def list_downloads():
     print(f"{c.DIM}{'─' * 60}{c.RESET}")
 
 
+def write_ffmpeg_concat_file(filepaths):
+    """Write a concat manifest for ffmpeg and return its path."""
+    entries = []
+    for filepath in filepaths:
+        escaped_path = filepath.replace("\\", "\\\\").replace("'", "\\'")
+        entries.append(f"file '{escaped_path}'\n")
+
+    temp_file = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".txt",
+        prefix="ytd_concat_",
+        delete=False,
+        encoding="utf-8",
+    )
+
+    try:
+        temp_file.writelines(entries)
+    finally:
+        temp_file.close()
+
+    return temp_file.name
+
+
 def stitch_videos(output_name: str = None):
     """Interactive video stitching."""
-    from moviepy import VideoFileClip, concatenate_videoclips
-    
     c = Colors
     video_files = get_video_files()
     
@@ -326,48 +511,60 @@ def stitch_videos(output_name: str = None):
         print("Cancelled.")
         return False
     
-    # Perform stitching
-    print(f"\n{c.YELLOW}🔄 Loading videos...{c.RESET}")
-    clips = []
-    
+    # Perform stitching with ffmpeg so large files can be streamed instead of loaded into Python.
+    source_paths = [os.path.join(WORK_PATH, filename) for filename in selected_files]
+    concat_manifest = None
+
     try:
+        print(f"\n{c.YELLOW}🔄 Preparing ffmpeg concat manifest...{c.RESET}")
         for i, filename in enumerate(selected_files, 1):
-            filepath = os.path.join(WORK_PATH, filename)
-            print(f"   {c.DIM}Loading [{i}/{len(selected_files)}]:{c.RESET} {filename}")
-            clip = VideoFileClip(filepath)
-            clips.append(clip)
-        
-        print(f"\n{c.YELLOW}🔄 Stitching videos (this may take a while)...{c.RESET}")
-        final_clip = concatenate_videoclips(clips, method="compose")
-        
-        print(f"{c.YELLOW}🔄 Writing output file...{c.RESET}")
-        final_clip.write_videofile(
+            print(f"   {c.DIM}Queueing [{i}/{len(selected_files)}]:{c.RESET} {filename}")
+
+        concat_manifest = write_ffmpeg_concat_file(source_paths)
+        ffmpeg_command = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "warning",
+            "-stats",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            concat_manifest,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
             output_path,
-            codec='libx264',
-            audio_codec='aac',
-            temp_audiofile='temp-audio.m4a',
-            remove_temp=True,
-            logger='bar'
+        ]
+
+        print(f"\n{c.YELLOW}🔄 Stitching videos with ffmpeg (this may take a while)...{c.RESET}")
+        subprocess.run(
+            ffmpeg_command,
+            check=True,
         )
-        
-        # Close all clips
-        final_clip.close()
-        for clip in clips:
-            clip.close()
-        
+
         output_size = os.path.getsize(output_path) / (1024 * 1024)
         print(f"\n{c.GREEN}✅ Successfully created:{c.RESET} {c.WHITE}{output_name}{c.RESET} {c.DIM}({output_size:.1f} MB){c.RESET}")
         return True
-        
-    except Exception as e:
-        print(f"\n❌ Error stitching videos: {e}")
-        # Clean up clips on error
-        for clip in clips:
-            try:
-                clip.close()
-            except:
-                pass
+
+    except subprocess.CalledProcessError as e:
+        print(f"\n{c.RED}❌ ffmpeg failed while stitching videos.{c.RESET}")
+        print(f"{c.DIM}Exit code: {e.returncode}{c.RESET}")
         return False
+    except Exception as e:
+        print(f"\n{c.RED}❌ Error stitching videos:{c.RESET} {e}")
+        return False
+    finally:
+        if concat_manifest and os.path.exists(concat_manifest):
+            os.remove(concat_manifest)
 
 
 def strip_audio_interactive():
@@ -1220,6 +1417,8 @@ def print_help():
   {c.GREEN}list{c.RESET}           📋 List files in current folder
   {c.GREEN}project{c.RESET}        📂 List / switch project folders
   {c.GREEN}project{c.RESET} <name> 📂 Switch to (or create) a subfolder
+    {c.GREEN}project external{c.RESET} 📂 Switch to the current host-mounted folder
+    {c.GREEN}project external{c.RESET} <path> 📂 Open a host folder from /Users, /Volumes, or /private
   {c.GREEN}stitch{c.RESET}         🎬 Stitch multiple videos together
   {c.GREEN}strip-audio{c.RESET}    🔇 Strip audio from a video
 
@@ -1241,6 +1440,7 @@ def print_help():
 {c.BOLD}Examples:{c.RESET}
   {c.CYAN}video{c.RESET} https://www.youtube.com/watch?v=dQw4w9WgXcQ
   {c.CYAN}audio{c.RESET} https://youtu.be/dQw4w9WgXcQ
+    {c.CYAN}project external /Volumes/MyDrive/Videos/my-compilation{c.RESET}
   {c.CYAN}project{c.RESET} my-compilation → {c.CYAN}stitch{c.RESET} → {c.CYAN}upload{c.RESET} → {c.CYAN}qr{c.RESET}
 """)
 
@@ -1263,13 +1463,19 @@ def interactive_mode():
 {c.RED}║{c.RESET}                                                {c.RED}║{c.RESET}
 {c.RED}╚{'═' * 48}╝{c.RESET}
 """)
+
+    if EXTERNAL_PROJECT_SOURCE:
+        print(f"{c.BLUE}Mounted host project:{c.RESET} {c.WHITE}{EXTERNAL_PROJECT_SOURCE}{c.RESET}")
+        print(f"{c.DIM}Use 'project external' to return to it after switching folders.{c.RESET}")
+    elif HOST_ROOT_MAPPINGS:
+        print(f"{c.DIM}Use 'project external /path/to/folder' to open a host folder.{c.RESET}")
     
     while True:
         # Build prompt showing current project folder
         if WORK_PATH == OUTPUT_PATH:
             folder_label = ""
         else:
-            folder_label = f" {c.CYAN}{os.path.basename(WORK_PATH)}{c.RESET}"
+            folder_label = f" {c.CYAN}{get_folder_label()}{c.RESET}"
         prompt = f"{c.RED}ytd{c.RESET}{folder_label}{c.BOLD}{c.WHITE}>{c.RESET} "
 
         try:
@@ -1292,7 +1498,14 @@ def interactive_mode():
             elif command in ('project', 'proj', 'folder'):
                 if not args:
                     list_projects()
-                elif args.lower() == 'root':
+                elif args.lower().startswith('external '):
+                    set_external_project(args[9:].strip())
+                elif args.lower() == 'external':
+                    if EXTERNAL_PROJECT_SOURCE:
+                        set_external_project(EXTERNAL_PROJECT_SOURCE)
+                    else:
+                        print(f"{c.YELLOW}Usage:{c.RESET} project external /path/to/folder")
+                elif args.lower() in ('root', 'downloads'):
                     set_project(None)
                 else:
                     set_project(args)

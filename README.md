@@ -18,6 +18,20 @@ A Docker-based CLI utility to download YouTube videos, stitch them together, upl
 
 This builds and runs the container, dropping you into an interactive shell.
 
+From inside the CLI, open a host folder directly with:
+
+```bash
+project external /Volumes/MyDrive/Videos/my-compilation
+```
+
+This works for folders under `/Users`, `/Volumes`, and `/private`, so you can work on files in place without copying them into `./downloads` first.
+
+You can still auto-open a folder on startup if you prefer:
+
+```bash
+./run.sh /Volumes/MyDrive/Videos/my-compilation
+```
+
 ## 📋 Commands
 
 | Command | Description |
@@ -26,6 +40,7 @@ This builds and runs the container, dropping you into an interactive shell.
 | `audio <URL>` | 🎵 Download audio only (MP3) |
 | `info <URL>` | ℹ️ Get video information |
 | `list` | 📋 List downloaded files |
+| `project external <path>` | 📂 Open a host folder from `/Users`, `/Volumes`, or `/private` |
 | `stitch` | 🎬 Stitch multiple videos together |
 | `upload` | 🚀 Upload a video to YouTube (with QR code generation) |
 | `backup` | ☁️ Backup videos to Google Cloud Storage |
@@ -98,6 +113,8 @@ To enable uploading videos to YouTube, you need to set up Google API credentials
 └── downloads/              # 🎥 Downloaded/stitched videos (not in git)
 ```
 
+When you launch with `./run.sh /some/host/path`, that host folder is also mounted into the container as a separate working project.
+
 ## ☁️ Google Cloud Storage Backup Setup
 
 To enable backing up videos to Google Cloud Storage:
@@ -156,6 +173,8 @@ Use `qr` to create QR codes for any URL:
 ## 📝 Notes
 
 - 📁 Videos are saved to `./downloads/` on your host machine
+- 🔌 You can open a folder on an external drive from inside the CLI with `project external /Volumes/DriveName/...`
+- 🐳 On macOS, Docker Desktop may need explicit file-sharing access to the external drive before bind mounts from `/Volumes` will work
 - 🔐 The first time you upload/backup, you'll need to authenticate via browser
 - 💾 After authentication, tokens are saved and reused
 - 🔒 Your `client_secrets.json` is mounted read-only for security
